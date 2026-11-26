@@ -1,0 +1,112 @@
+diff --git a/apps/desktop/src/config_center/config_center.cpp b/apps/desktop/src/config_center/config_center.cpp
+index a54c841..2fad2c0 100644
+--- a/apps/desktop/src/config_center/config_center.cpp
++++ b/apps/desktop/src/config_center/config_center.cpp
+@@ -190,7 +190,7 @@ int ConfigCenter::Load() {
+       strlen(signal_server_host_value) > 0) {
+     signal_server_host_ = signal_server_host_value;
+   } else {
+-    signal_server_host_ = "";
++    signal_server_host_ = ConfigCenter::kManagedSignalServerHost;
+   }
+   const char* signal_server_port_value =
+       ini_->GetValue(section_, "signal_server_port", nullptr);
+@@ -199,7 +199,7 @@ int ConfigCenter::Load() {
+     signal_server_port_ =
+         static_cast<int>(ini_->GetLongValue(section_, "signal_server_port", 0));
+   } else {
+-    signal_server_port_ = 0;
++    signal_server_port_ = ConfigCenter::kManagedSignalServerPort;
+   }
+   enable_autostart_ =
+       ini_->GetBoolValue(section_, "enable_autostart", enable_autostart_);
+diff --git a/apps/desktop/src/config_center/config_center.h b/apps/desktop/src/config_center/config_center.h
+index 34412fc..33be472 100644
+--- a/apps/desktop/src/config_center/config_center.h
++++ b/apps/desktop/src/config_center/config_center.h
+@@ -110,6 +110,11 @@ class ConfigCenter {
+   int SetAddressBookServer(const std::string& server);
+   int SetAddressBookToken(const std::string& token);
+ 
++  // bnyc-remote: 公司定制版内置默认（生产部署时改这三处）
++  static constexpr const char* kManagedSignalServerHost = "192.0.2.6";
++  static constexpr int kManagedSignalServerPort = 9099;
++  static constexpr const char* kManagedAddressBookServer = "http://192.0.2.6:8080";
++
+   int Load();
+   int Save();
+   // Only connection/admission preferences cross into the SYSTEM host profile.
+diff --git a/apps/desktop/src/gui/application/gui_application.cpp b/apps/desktop/src/gui/application/gui_application.cpp
+index 9b45387..ce0bc80 100644
+--- a/apps/desktop/src/gui/application/gui_application.cpp
++++ b/apps/desktop/src/gui/application/gui_application.cpp
+@@ -1433,7 +1433,10 @@ void GuiApplication::InitializeModules() {
+ 
+ void GuiApplication::InitializeAddressBook() {
+   if (!config_center_) return;
+-  const auto server = config_center_->GetAddressBookServer();
++  const auto configured = config_center_->GetAddressBookServer();
++  const std::string server = configured.empty()
++                                 ? ConfigCenter::kManagedAddressBookServer
++                                 : configured;
+   if (server.empty()) return;
+   address_book_.SetServerUrl(server);
+   address_book_.SetToken(config_center_->GetAddressBookToken());
+diff --git a/apps/desktop/src/gui/runtime/announcement_inbox.cpp b/apps/desktop/src/gui/runtime/announcement_inbox.cpp
+index 3300767..142c031 100644
+--- a/apps/desktop/src/gui/runtime/announcement_inbox.cpp
++++ b/apps/desktop/src/gui/runtime/announcement_inbox.cpp
+@@ -108,6 +108,8 @@ void AnnouncementInbox::SetConnected(bool connected) {
+   BeginCatalog();
+ }
+ void AnnouncementInbox::Refresh() {
++  // bnyc-remote: 公司定制版不拉取/展示官方公告
++  return;
+   std::lock_guard<std::mutex> lock(mutex_);
+   BeginCatalog();
+ }
+diff --git a/apps/desktop/src/gui/ui/main_window.slint b/apps/desktop/src/gui/ui/main_window.slint
+index a08b2ac..675f65a 100644
+--- a/apps/desktop/src/gui/ui/main_window.slint
++++ b/apps/desktop/src/gui/ui/main_window.slint
+@@ -3142,7 +3142,8 @@ export component MainWindow inherits Window {
+                                 checked <=> root.lan-listen-all-draft;
+                                 enabled: root.ip-direct-enabled-draft;
+                             }
+-                            SettingsToggleRow { label: UiStrings.force-relay; checked <=> root.force-relay-enabled; enabled: !root.settings-session-active; }
++                            // bnyc-remote: 隐藏「强制中继连接」，避免用户误开启导致 ICE 零候选
++                            SettingsToggleRow { label: UiStrings.force-relay; checked <=> root.force-relay-enabled; enabled: !root.settings-session-active; visible: false; }
+                             SettingsToggleRow {
+                                 label: UiStrings.self-hosted;
+                                 label-reserve: self-host-edit.width + 84px;
+@@ -3431,7 +3432,7 @@ export component MainWindow inherits Window {
+                         }
+                     }
+                 }
+-                if SponsorDirectory.special.length > 0: SpecialSponsorStrip {
++                if false: SpecialSponsorStrip {
+                     active: root.window-active;
+                     open-link(url) => { root.open-about-link(url); }
+                 }
+@@ -3566,7 +3567,7 @@ export component MainWindow inherits Window {
+                             }
+                         }
+                     }
+-                    if SponsorDirectory.special.length > 0: SpecialSponsorStrip {
++                    if false: SpecialSponsorStrip {
+                         active: root.window-active;
+                         open-link(url) => { root.open-about-link(url); }
+                     }
+diff --git a/apps/desktop/src/version_checker/version_checker.cpp b/apps/desktop/src/version_checker/version_checker.cpp
+index 8a299aa..709d53e 100644
+--- a/apps/desktop/src/version_checker/version_checker.cpp
++++ b/apps/desktop/src/version_checker/version_checker.cpp
+@@ -107,6 +107,8 @@ void ConfigureLinuxCaCerts(httplib::Client* cli) {
+ }  // namespace
+ 
+ std::optional<VersionInfo> CheckUpdate() {
++  // bnyc-remote: 公司定制版不做在线版本检查，避免弹窗/自动更新覆盖定制
++  return std::nullopt;
+   httplib::Client cli("https://version.crossdesk.cn");
+ 
+   cli.set_connection_timeout(5);
