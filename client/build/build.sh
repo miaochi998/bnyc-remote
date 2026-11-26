@@ -108,6 +108,8 @@ fi
 
 if [ "$BUILD" = "1" ]; then
   command -v xmake >/dev/null 2>&1 || { echo "xmake not found" >&2; exit 1; }
+  echo "== xmake configure =="
+  ( cd "$SRC_DIR" && xmake f -y )
   echo "== xmake build =="
   ( cd "$SRC_DIR" && xmake b -vy crossdesk )
   echo "构建完成，产物见上游仓库 build/ 或 target/ 目录"
