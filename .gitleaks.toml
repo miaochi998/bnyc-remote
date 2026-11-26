@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+# 允许的示例占位符（避免误报）
+[allowlist]
+description = "文档与示例中的占位符"
+regexes = [
+  '''example\.com''',
+  '''192\.0\.2\.\d+''',
+  '''203\.0\.113\.\d+''',
+  '''CHANGE_ME''',
+  '''<[^>]+>''',
+]

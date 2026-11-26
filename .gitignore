@@ -1,0 +1,45 @@
+# 敏感信息与本地文件（禁止提交）
+.env
+.env.*
+!.env.example
+*.env
+real-values.local.md
+local/
+PROJECT_MEMORY.md
+远程桌面选型深度分析.md
+docs/00-方案设计-v0.1.md
+
+# 凭据与证书
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*.kdbx
+
+# 数据
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+data/
+
+# 上游与构建产物
+client/upstream/
+client/build/out/
+*.dmg
+*.exe
+*.msi
+*.deb
+*.AppImage
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.log
