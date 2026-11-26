@@ -88,6 +88,24 @@ else
   echo "== no patches to apply =="
 fi
 
+# patch 0003 内置的服务器地址是公开占位符 192.0.2.6；
+# 构建公司定制客户端时用环境变量注入真实地址（不写入仓库）：
+#   BNYC_SIGNAL_HOST=192.168.x.x BNYC_SIGNAL_PORT=9099 BNYC_PORTAL_URL=http://192.168.x.x:8080 ./build.sh
+if [ -n "${BNYC_SIGNAL_HOST:-}" ]; then
+  SIGNAL_PORT="${BNYC_SIGNAL_PORT:-9099}"
+  PORTAL_URL="${BNYC_PORTAL_URL:-http://${BNYC_SIGNAL_HOST}:8080}"
+  CFG="$SRC_DIR/apps/desktop/src/config_center/config_center.h"
+  if [ -f "$CFG" ]; then
+    sed -i.bak \
+      -e "s|kManagedSignalServerHost = \"192.0.2.6\"|kManagedSignalServerHost = \"${BNYC_SIGNAL_HOST}\"|" \
+      -e "s|kManagedSignalServerPort = 9099|kManagedSignalServerPort = ${SIGNAL_PORT}|" \
+      -e "s|kManagedAddressBookServer = \"http://192.0.2.6:8080\"|kManagedAddressBookServer = \"${PORTAL_URL}\"|" \
+      "$CFG"
+    rm -f "$CFG.bak"
+    echo "== injected managed defaults: ${BNYC_SIGNAL_HOST}:${SIGNAL_PORT}, portal ${PORTAL_URL} =="
+  fi
+fi
+
 if [ "$BUILD" = "1" ]; then
   command -v xmake >/dev/null 2>&1 || { echo "xmake not found" >&2; exit 1; }
   echo "== xmake build =="
