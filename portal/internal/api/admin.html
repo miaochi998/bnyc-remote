@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BNYC 账号管理</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f2f5f9; color: #22324a; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: #6b7c93; font-size: 13px; margin-bottom: 22px; }
+  .card { background: #fff; border: 1px solid #e1e7ef; border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 14px; }
+  label { display: block; font-size: 12px; color: #5a6b82; margin-bottom: 4px; }
+  input, select { width: 100%; padding: 9px 10px; border: 1px solid #d7dfe9; border-radius: 8px; font-size: 13px; margin-bottom: 10px; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: #3275dc; }
+  button { border: 0; border-radius: 8px; padding: 9px 16px; font-size: 13px; cursor: pointer; background: #3275dc; color: #fff; }
+  button:hover { background: #2866c9; }
+  button.ghost { background: #eef2f8; color: #3c4d63; }
+  button.ghost:hover { background: #e2e9f3; }
+  button.danger { background: #d65252; }
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  .row > div { flex: 1; }
+  .msg { font-size: 12px; min-height: 18px; color: #2e7d32; }
+  .msg.err { color: #c43c43; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #eef2f8; }
+  th { color: #6b7c93; font-weight: 500; font-size: 12px; }
+  .muted { color: #8b95a5; font-size: 12px; }
+  .hidden { display: none; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2f8; font-size: 11px; color: #5a6b82; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BNYC 账号管理</h1>
+  <div class="sub">为员工创建账号、重置密码。员工在客户端「菜单 → 地址簿」用这些账号登录。</div>
+
+  <!-- 登录 -->
+  <div id="loginCard" class="card">
+    <h2>管理员登录</h2>
+    <label>用户名</label>
+    <input id="adminUser" value="admin" autocomplete="username">
+    <label>密码</label>
+    <input id="adminPass" type="password" autocomplete="current-password">
+    <button id="loginBtn">登录</button>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+
+  <!-- 管理 -->
+  <div id="panel" class="hidden">
+    <div class="card">
+      <div class="row">
+        <h2 style="flex:1;margin:0">员工账号</h2>
+        <button class="ghost" id="logoutBtn">退出登录</button>
+      </div>
+      <div id="listMsg" class="msg"></div>
+      <table>
+        <thead><tr><th>ID</th><th>用户名</th><th>显示名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody id="userRows"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>创建新员工账号</h2>
+      <div class="row">
+        <div><label>用户名</label><input id="newUsername" placeholder="如 zhangsan"></div>
+        <div><label>显示名</label><input id="newDisplay" placeholder="如 张三"></div>
+        <div><label>初始密码</label><input id="newPassword" placeholder="至少 8 位"></div>
+        <div style="flex:0 0 110px"><button id="createBtn">创建</button></div>
+      </div>
+      <div id="createMsg" class="msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var token = sessionStorage.getItem('bnyc_admin_token') || '';
+  var $ = function (id) { return document.getElementById(id); };
+  function setMsg(id, text, err) {
+    var el = $(id); el.textContent = text || '';
+    el.className = 'msg' + (err ? ' err' : '');
+  }
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    return fetch(path, {
+      method: opts.method || 'GET', headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        return d;
+      });
+    });
+  }
+  function showPanel() { $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); loadUsers(); }
+  function showLogin() { $('panel').classList.add('hidden'); $('loginCard').classList.remove('hidden'); }
+
+  function loadUsers() {
+    api('/api/admin/users').then(function (list) {
+      var body = $('userRows'); body.innerHTML = '';
+      (list || []).forEach(function (u) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + u.id + '</td><td>' + esc(u.username) + '</td><td>' +
+          esc(u.display_name || '') + '</td><td><span class="pill">' + esc(u.role) + '</span></td><td class="muted">' +
+          esc(u.created_at || '') + '</td>';
+        var td = document.createElement('td');
+        var btn = document.createElement('button');
+        btn.className = 'ghost'; btn.textContent = '重置密码';
+        btn.onclick = function () {
+          var p = prompt('为 ' + u.username + ' 设置新密码（至少 8 位）');
+          if (!p) return;
+          api('/api/admin/users/' + u.id + '/reset-password', { method: 'POST', body: { password: p } })
+            .then(function () { setMsg('listMsg', '已重置 ' + u.username + ' 的密码'); })
+            .catch(function (e) { setMsg('listMsg', e.message, true); });
+        };
+        td.appendChild(btn); tr.appendChild(td);
+        body.appendChild(tr);
+      });
+    }).catch(function (e) { setMsg('listMsg', e.message, true); });
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  $('loginBtn').onclick = function () {
+    setMsg('loginMsg', '登录中…');
+    api('/api/login', { method: 'POST', body: { username: $('adminUser').value.trim(), password: $('adminPass').value } })
+      .then(function (d) { token = d.token; sessionStorage.setItem('bnyc_admin_token', token); setMsg('loginMsg', ''); showPanel(); })
+      .catch(function (e) { setMsg('loginMsg', '登录失败：' + e.message, true); });
+  };
+  $('adminPass').onkeydown = function (e) { if (e.key === 'Enter') $('loginBtn').click(); };
+
+  $('createBtn').onclick = function () {
+    var username = $('newUsername').value.trim();
+    var display = $('newDisplay').value.trim();
+    var password = $('newPassword').value;
+    if (!username || password.length < 8) { setMsg('createMsg', '用户名必填，密码至少 8 位', true); return; }
+    setMsg('createMsg', '创建中…');
+    api('/api/admin/users', { method: 'POST', body: { username: username, password: password, display_name: display, role: 'user' } })
+      .then(function () {
+        setMsg('createMsg', '已创建 ' + username);
+        $('newUsername').value = ''; $('newDisplay').value = ''; $('newPassword').value = '';
+        loadUsers();
+      })
+      .catch(function (e) { setMsg('createMsg', '创建失败：' + e.message, true); });
+  };
+
+  $('logoutBtn').onclick = function () {
+    token = ''; sessionStorage.removeItem('bnyc_admin_token');
+    showLogin(); setMsg('loginMsg', '已退出');
+  };
+
+  if (token) showPanel(); else showLogin();
+})();
+</script>
+</body>
+</html>
