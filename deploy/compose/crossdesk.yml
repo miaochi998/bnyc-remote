@@ -1,0 +1,85 @@
+# CrossDesk 信令 + Coturn 中继
+# 所有真实值来自 ../.env（本地，不提交）；本文件不含任何密钥。
+# 端口：9099/TCP=信令，3478/TCP+UDP=STUN/TURN，49152-49161/UDP=中继（已收窄）
+services:
+  crossdesk-server:
+    image: "${CROSSDESK_IMAGE:?Set CROSSDESK_IMAGE in .env}"
+    container_name: crossdesk-server
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 20s
+    ulimits:
+      nofile:
+        soft: ${CROSSDESK_NOFILE:-32768}
+        hard: ${CROSSDESK_NOFILE:-32768}
+    environment:
+      EXTERNAL_IP: "${EXTERNAL_IP:?Set EXTERNAL_IP in .env}"
+      INTERNAL_IP: "${INTERNAL_IP:?Set INTERNAL_IP in .env}"
+      CROSSDESK_SERVER_PORT: "${CROSSDESK_SERVER_PORT:-9099}"
+      COTURN_PORT: "${COTURN_PORT:-3478}"
+      COTURN_PUBLIC_HOST: "${COTURN_PUBLIC_HOST:-}"
+      COTURN_AUTH_SECRET: "${COTURN_AUTH_SECRET:?Set COTURN_AUTH_SECRET in .env}"
+      COTURN_CREDENTIAL_TTL_SECONDS: "${COTURN_CREDENTIAL_TTL_SECONDS:-3600}"
+      CROSSDESK_ICE_SERVERS: "${CROSSDESK_ICE_SERVERS:-}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+    volumes:
+      - "${CROSSDESK_DATA_DIR:-/var/lib/crossdesk}:/var/lib/crossdesk"
+      - "${CROSSDESK_LOG_DIR:-/var/log/crossdesk}:/var/log/crossdesk"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /var/lib/crossdesk/certs/api.crossdesk.cn.key && test -s /var/lib/crossdesk/certs/api.crossdesk.cn_bundle.crt
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    logging:
+      driver: none
+
+  coturn:
+    image: "${COTURN_IMAGE:?Set COTURN_IMAGE in .env}"
+    container_name: crossdesk-coturn
+    network_mode: host
+    restart: unless-stopped
+    user: "0:0"
+    entrypoint:
+      - turnserver
+    depends_on:
+      crossdesk-server:
+        condition: service_healthy
+    volumes:
+      - "${CROSSDESK_DATA_DIR:-/var/lib/crossdesk}/certs:/certs:ro"
+      - "${CROSSDESK_LOG_DIR:-/var/log/crossdesk}/coturn:/var/log/coturn"
+    command:
+      - -n
+      - "--listening-port=${COTURN_PORT:-3478}"
+      - "--listening-ip=${INTERNAL_IP:?Set INTERNAL_IP in .env}"
+      - "--relay-ip=${INTERNAL_IP:?Set INTERNAL_IP in .env}"
+      - "--external-ip=${EXTERNAL_IP:?Set EXTERNAL_IP in .env}/${INTERNAL_IP:?Set INTERNAL_IP in .env}"
+      - "--min-port=${MIN_PORT:-49152}"
+      - "--max-port=${MAX_PORT:-49161}"
+      - --fingerprint
+      - --use-auth-secret
+      - --dtls
+      - "--static-auth-secret=${COTURN_AUTH_SECRET:?Set COTURN_AUTH_SECRET in .env}"
+      - "--realm=${COTURN_REALM:-crossdesk}"
+      - "--stateless-nonce-secret=${COTURN_STATELESS_NONCE_SECRET:?Set COTURN_STATELESS_NONCE_SECRET in .env}"
+      - --cert=/certs/api.crossdesk.cn_bundle.crt
+      - --pkey=/certs/api.crossdesk.cn.key
+      - --log-file=/var/log/coturn/turn.log
+      - --no-stdout-log
+      - "--log-min-level=${COTURN_LOG_LEVEL:-warning}"
+      - --new-log-timestamp
+      - --cli=false
+      - --no-multicast-peers
+      - --proc-user=nobody
+      - --proc-group=nogroup
+    mem_limit: "${COTURN_MEMORY_LIMIT:-512m}"
+    pids_limit: 256
+    ulimits:
+      nofile:
+        soft: 524288
+        hard: 524288
+    logging:
+      driver: none

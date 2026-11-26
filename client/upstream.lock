@@ -1,0 +1,6 @@
+# bnyc-remote upstream lock
+# 固定桌面端上游版本，构建时按此 checkout 后再应用 patches/。
+url=https://github.com/kunkundi/crossdesk.git
+ref=v1.7.7-20261124
+# 可选：填 commit 则优先于 ref；留空表示使用 ref。
+commit=
