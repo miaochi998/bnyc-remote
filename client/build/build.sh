@@ -9,6 +9,14 @@
 # 依赖：git；--build 时还需要 xmake 与对应平台编译工具链。
 set -euo pipefail
 
+# macOS: Homebrew 的 openssl 可能已指向 OpenSSL 4.x，而 xmake 为依赖链源码
+# 构建 Python 3.12 时，_ssl.c 与 OpenSSL 4 头文件不兼容（ASN1_OCTET_STRING
+# incomplete type）。把 pkg-config/CMake 指向 openssl@3 可避免该失败。
+if [ "$(uname -s)" = "Darwin" ] && [ -d /opt/homebrew/opt/openssl@3 ]; then
+  export PKG_CONFIG_PATH="/opt/homebrew/opt/openssl@3/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export CMAKE_PREFIX_PATH="/opt/homebrew/opt/openssl@3:${CMAKE_PREFIX_PATH:-}"
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLIENT_DIR="$ROOT/client"
 LOCK="$CLIENT_DIR/upstream.lock"
