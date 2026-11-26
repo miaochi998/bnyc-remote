@@ -1,0 +1,55 @@
+diff --git a/apps/desktop/src/gui/application/gui_application.cpp b/apps/desktop/src/gui/application/gui_application.cpp
+index ce0bc80..3d16765 100644
+--- a/apps/desktop/src/gui/application/gui_application.cpp
++++ b/apps/desktop/src/gui/application/gui_application.cpp
+@@ -2085,6 +2085,10 @@ void GuiApplication::BindMainCallbacks(bool gallery_window) {
+     main->set_lan_connecting(lan_connecting_ != nullptr);
+     main->set_lan_message(UiText(lan_error_));
+   });
++  // 登录面板预填内置的地址簿服务器地址，员工只需输用户名和密码
++  main->set_addressbook_server(
++      slint::SharedString(ConfigCenter::kManagedAddressBookServer));
++
+   main->on_addressbook_login_submit([this, main] {
+     const std::string server(main->get_addressbook_server());
+     const std::string username(main->get_addressbook_username());
+diff --git a/apps/desktop/src/gui/ui/main_window.slint b/apps/desktop/src/gui/ui/main_window.slint
+index 675f65a..315fa1d 100644
+--- a/apps/desktop/src/gui/ui/main_window.slint
++++ b/apps/desktop/src/gui/ui/main_window.slint
+@@ -2991,6 +2991,11 @@ export component MainWindow inherits Window {
+                     input-type: InputType.text; single-line: true;
+                     vertical-alignment: center; font-size: 13px;
+                 }
++                if root.addressbook-server == "": Text {
++                    x: 10px; y: 0px; width: parent.width - 20px; height: parent.height;
++                    text: "服务器地址"; color: #9aa4b5; font-size: 13px;
++                    vertical-alignment: center;
++                }
+             }
+             Rectangle {
+                 x: 24px; y: 126px; width: parent.width - 48px; height: 34px;
+@@ -3002,6 +3007,11 @@ export component MainWindow inherits Window {
+                     input-type: InputType.text; single-line: true;
+                     vertical-alignment: center; font-size: 13px;
+                 }
++                if root.addressbook-username == "": Text {
++                    x: 10px; y: 0px; width: parent.width - 20px; height: parent.height;
++                    text: "用户名"; color: #9aa4b5; font-size: 13px;
++                    vertical-alignment: center;
++                }
+             }
+             Rectangle {
+                 x: 24px; y: 168px; width: parent.width - 48px; height: 34px;
+@@ -3013,6 +3023,11 @@ export component MainWindow inherits Window {
+                     input-type: InputType.password; single-line: true;
+                     vertical-alignment: center; font-size: 13px;
+                 }
++                if root.addressbook-password == "": Text {
++                    x: 10px; y: 0px; width: parent.width - 20px; height: parent.height;
++                    text: "密码"; color: #9aa4b5; font-size: 13px;
++                    vertical-alignment: center;
++                }
+             }
+             Text {
+                 x: 24px; y: 208px; width: parent.width - 48px; height: 18px;
