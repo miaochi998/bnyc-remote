@@ -1,0 +1,41 @@
+name: build-client
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "client/**"
+      - ".github/workflows/build-client.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: Build macOS client (patched)
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.2
+
+      - name: Fetch upstream and apply patches
+        run: ./client/build/build.sh
+
+      - name: Configure
+        run: cd client/upstream && xmake f -y
+
+      - name: Build
+        run: cd client/upstream && xmake b -vy crossdesk
+
+      - name: Show artifact
+        if: always()
+        run: |
+          find client/upstream/build -maxdepth 4 -type f -name "crossdesk*" 2>/dev/null | head -20 || true
