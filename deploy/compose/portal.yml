@@ -1,0 +1,25 @@
+# 地址簿/账号服务（portal）
+# 所有真实值通过 env_file 注入，本文件不含任何密钥。
+services:
+  portal:
+    build:
+      context: ../../portal
+    image: bnyc-remote/portal:dev
+    container_name: addrbook-dev
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      # 只监听本机回环，对外由反向代理暴露
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - portal-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  portal-data:
