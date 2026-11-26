@@ -1,11 +1,8 @@
 name: build-client
 
+# 按需触发（R16）：日常验证用本机构建；仅在开发阶段完成或用户明确要求时运行。
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "client/**"
-      - ".github/workflows/build-client.yml"
 
 permissions:
   contents: read

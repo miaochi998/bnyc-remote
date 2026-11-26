@@ -1,0 +1,192 @@
+diff --git a/apps/desktop/src/gui/application/gui_application.cpp b/apps/desktop/src/gui/application/gui_application.cpp
+index 52c7c20..9b45387 100644
+--- a/apps/desktop/src/gui/application/gui_application.cpp
++++ b/apps/desktop/src/gui/application/gui_application.cpp
+@@ -2082,6 +2082,47 @@ void GuiApplication::BindMainCallbacks(bool gallery_window) {
+     main->set_lan_connecting(lan_connecting_ != nullptr);
+     main->set_lan_message(UiText(lan_error_));
+   });
++  main->on_addressbook_login_submit([this, main] {
++    const std::string server(main->get_addressbook_server());
++    const std::string username(main->get_addressbook_username());
++    const std::string password(main->get_addressbook_password());
++    if (server.empty() || username.empty() || password.empty()) {
++      main->set_addressbook_error("请填写服务器、用户名和密码");
++      return;
++    }
++    main->set_addressbook_error("");
++    std::thread([this, server, username, password] {
++      AddressBook client(server, "");
++      std::string error;
++      if (!client.Login(username, password, &error)) {
++        slint::invoke_from_event_loop([this, error] {
++          if (ui_)
++            ui_->main->set_addressbook_error(slint::SharedString(error));
++        });
++        return;
++      }
++      const std::string token = client.token();
++      slint::invoke_from_event_loop([this, server, token] {
++        if (config_center_) {
++          config_center_->SetAddressBookServer(server);
++          config_center_->SetAddressBookToken(token);
++        }
++        address_book_.SetServerUrl(server);
++        address_book_.SetToken(token);
++        SyncAddressBook();
++        if (ui_) {
++          ui_->main->set_addressbook_error("");
++          ui_->main->set_addressbook_password(slint::SharedString(""));
++          ui_->main->set_addressbook_login_open(false);
++        }
++      });
++    }).detach();
++  });
++  main->on_addressbook_login_dismiss([this, main] {
++    main->set_addressbook_error("");
++    main->set_addressbook_password(slint::SharedString(""));
++    main->set_addressbook_login_open(false);
++  });
+   main->on_connect_requested(
+       [this](slint::SharedString id) { ConnectFromUi(std::string(id)); });
+   main->on_format_remote_id([](slint::SharedString value) {
+diff --git a/apps/desktop/src/gui/ui/main_window.slint b/apps/desktop/src/gui/ui/main_window.slint
+index cc481e2..a08b2ac 100644
+--- a/apps/desktop/src/gui/ui/main_window.slint
++++ b/apps/desktop/src/gui/ui/main_window.slint
+@@ -846,6 +846,13 @@ export component MainWindow inherits Window {
+ 
+     private property <bool> menu-open: false;
+     in-out property <bool> settings-open: false;
++    in-out property <bool> addressbook-login-open: false;
++    in-out property <string> addressbook-server;
++    in-out property <string> addressbook-username;
++    in-out property <string> addressbook-password;
++    in-out property <string> addressbook-error;
++    callback addressbook-login-submit;
++    callback addressbook-login-dismiss;
+     in-out property <int> settings-tab: 0;
+     private property <length> settings-scroll-y: 0px;
+     private property <bool> pause-video-hint-visible: false;
+@@ -2278,8 +2285,9 @@ export component MainWindow inherits Window {
+         x: menu-button.x + menu-button.width - self.width;
+         y: menu-button.y + menu-button.height + 6px;
+         width: max(128px, max(menu-feedback-label.preferred-width, max(menu-settings-label.preferred-width,
++                   max(menu-addressbook-label.preferred-width,
+                    max(menu-messages-label.preferred-width + (root.announcement-unread > 0 ? menu-message-badge.width + 8px : 0px),
+-                       menu-about-label.preferred-width + (root.update-available ? menu-update-badge.width + 8px : 0px)))) + 28px);
++                       menu-about-label.preferred-width + (root.update-available ? menu-update-badge.width + 8px : 0px))))) + 28px);
+         height: application-menu-content.preferred-height;
+         background: WorkbenchStyle.surface;
+         outline-color: UiSurface.edge;
+@@ -2313,6 +2321,30 @@ export component MainWindow inherits Window {
+                     clicked => { root.menu-open = false; root.settings-open = true; }
+                 }
+             }
++            menu-addressbook := Rectangle {
++                height: 30px;
++                background: addressbook-touch.pressed ? WorkbenchStyle.pressed-surface
++                          : addressbook-touch.has-hover ? WorkbenchStyle.hover-surface
++                                                     : transparent;
++                border-width: 0px;
++                border-radius: UiRadius.control;
++                animate background { duration: 120ms; }
++                accessible-role: button;
++                accessible-label: "地址簿";
++                accessible-action-default => { addressbook-touch.clicked(); }
++                menu-addressbook-label := Text {
++                    x: 8px;
++                    height: parent.height;
++                    text: "地址簿";
++                    color: WorkbenchStyle.text; font-size: 12px;
++                    vertical-alignment: center;
++                    accessible-role: none;
++                }
++                addressbook-touch := TouchArea {
++                    mouse-cursor: pointer;
++                    clicked => { root.menu-open = false; root.addressbook-login-open = true; }
++                }
++            }
+             Rectangle {
+                 height: 7px;
+                 SurfaceSeparator {
+@@ -2926,6 +2958,79 @@ export component MainWindow inherits Window {
+     }
+ 
+     // Both tabs share one draft and the same save/cancel actions.
++    if root.addressbook-login-open: Rectangle {
++        background: #15223850;
++        z: 46;
++        TouchArea { clicked => { focus-sink.focus(); } }
++        addressbook-dialog := DialogSurface {
++            x: (parent.width - self.width) / 2;
++            y: (parent.height - self.height) / 2;
++            width: min(380px, parent.width - 40px);
++            height: min(330px, parent.height - 16px);
++            background: #f8fafc; border-radius: UiRadius.surface; outline-color: UiSurface.edge;
++
++            TouchArea { clicked => { focus-sink.focus(); } }
++            Text {
++                x: 24px; y: 18px;
++                width: parent.width - 48px; height: 27px;
++                text: "地址簿登录"; font-size: 20px; font-weight: 600; color: #22324a;
++            }
++            Text {
++                x: 24px; y: 56px;
++                width: parent.width - 48px; height: 18px;
++                text: "登录后，你的设备会出现在近期连接里，点击即可直连。";
++                font-size: 11px; color: #6b7c93; wrap: word-wrap;
++            }
++            Rectangle {
++                x: 24px; y: 84px; width: parent.width - 48px; height: 34px;
++                background: white; border-radius: UiRadius.control;
++                border-width: 1px; border-color: UiSurface.edge;
++                TextInput {
++                    x: 10px; y: 0px; width: parent.width - 20px; height: parent.height;
++                    text <=> root.addressbook-server;
++                    input-type: InputType.text; single-line: true;
++                    vertical-alignment: center; font-size: 13px;
++                }
++            }
++            Rectangle {
++                x: 24px; y: 126px; width: parent.width - 48px; height: 34px;
++                background: white; border-radius: UiRadius.control;
++                border-width: 1px; border-color: UiSurface.edge;
++                TextInput {
++                    x: 10px; y: 0px; width: parent.width - 20px; height: parent.height;
++                    text <=> root.addressbook-username;
++                    input-type: InputType.text; single-line: true;
++                    vertical-alignment: center; font-size: 13px;
++                }
++            }
++            Rectangle {
++                x: 24px; y: 168px; width: parent.width - 48px; height: 34px;
++                background: white; border-radius: UiRadius.control;
++                border-width: 1px; border-color: UiSurface.edge;
++                TextInput {
++                    x: 10px; y: 0px; width: parent.width - 20px; height: parent.height;
++                    text <=> root.addressbook-password;
++                    input-type: InputType.password; single-line: true;
++                    vertical-alignment: center; font-size: 13px;
++                }
++            }
++            Text {
++                x: 24px; y: 208px; width: parent.width - 48px; height: 18px;
++                text: root.addressbook-error;
++                color: UiSurface.error; font-size: 11px; wrap: word-wrap;
++            }
++            SettingsButton {
++                x: parent.width - 24px - self.width; y: parent.height - 24px - self.height;
++                text: "取消";
++                clicked => { root.addressbook-login-dismiss(); }
++            }
++            SettingsButton {
++                x: parent.width - 24px - self.width - 96px - 8px; y: parent.height - 24px - self.height;
++                text: "登录"; primary: true;
++                clicked => { root.addressbook-login-submit(); }
++            }
++        }
++    }
+     if root.settings-open: Rectangle {
+         background: #15223850;
+         z: 45;
